@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Seguimiento y ruta hacia destino</title>
+<title>Seguimiento y ruta suavizada</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css"/>
@@ -13,7 +13,7 @@
 </style>
 </head>
 <body>
-<h2 style="text-align:center">Mi ubicación y ruta hacia destino</h2>
+<h2 style="text-align:center">Mi ubicación y ruta hacia destino (GPS suavizado)</h2>
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -21,7 +21,7 @@
 
 <script>
   // Coordenadas del destino
-  const destino = [14.639000, -90.511000]; // cambia por el destino que quieras
+  const destino = [14.639000, -90.511000]; // cambia por tu destino
 
   // Inicializa el mapa
   const map = L.map('map').setView([0,0], 2);
@@ -35,7 +35,7 @@
   const destinoMarker = L.marker(destino, {title: "Destino"}).addTo(map)
                           .bindPopup("Destino").openPopup();
 
-  // Marcador de tu ubicación
+  // Marcador de mi ubicación
   const miMarker = L.marker([0,0], {title: "Mi ubicación"}).addTo(map);
 
   // Polilínea para mostrar recorrido
@@ -44,27 +44,38 @@
   // Control de ruta
   let routingControl;
 
-  // Función para actualizar ubicación en tiempo real
+  // Buffer para suavizado GPS
+  const buffer = [];
+  const maxBuffer = 10; // cantidad de posiciones para promedio
+
   if(navigator.geolocation) {
     navigator.geolocation.watchPosition((position) => {
       const lat = position.coords.latitude;
       const lng = position.coords.longitude;
 
-      // Mueve marcador de mi ubicación
-      miMarker.setLatLng([lat, lng]);
+      // Agregar posición al buffer
+      buffer.push([lat,lng]);
+      if(buffer.length > maxBuffer) buffer.shift();
 
-      // Añade punto a la polilínea del recorrido
-      path.addLatLng([lat, lng]);
+      // Calcular promedio
+      const promedio = buffer.reduce((acc, p) => [acc[0]+p[0], acc[1]+p[1]], [0,0])
+                               .map(v => v / buffer.length);
+
+      // Mover marcador suavizado
+      miMarker.setLatLng(promedio);
+
+      // Añadir punto a la polilínea
+      path.addLatLng(promedio);
 
       // Centrar mapa
-      map.panTo([lat, lng]);
+      map.panTo(promedio);
 
-      // Crear o actualizar ruta
+      // Crear o actualizar ruta hacia destino
       if(routingControl) {
-        routingControl.setWaypoints([L.latLng(lat, lng), L.latLng(destino[0], destino[1])]);
+        routingControl.setWaypoints([L.latLng(promedio[0], promedio[1]), L.latLng(destino[0], destino[1])]);
       } else {
         routingControl = L.Routing.control({
-          waypoints: [L.latLng(lat, lng), L.latLng(destino[0], destino[1])],
+          waypoints: [L.latLng(promedio[0], promedio[1]), L.latLng(destino[0], destino[1])],
           routeWhileDragging: false,
           addWaypoints: false,
           draggableWaypoints: false
